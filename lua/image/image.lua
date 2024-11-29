@@ -287,7 +287,22 @@ local from_file = function(path, options, state)
 
   -- convert non-png images to png and read the dimensions
   local source_path = absolute_path
-  local converted_path = state.tmp_dir .. "/" .. utils.base64.encode(id) .. "-source.png"
+
+  local dirConvert = '~/Trash/imageConvert'
+  -- Expand the '~' to the full path
+  local home = os.getenv('HOME') or '.' -- Use fallback if HOME is nil
+  dirConvert = dirConvert:gsub('~', home)
+
+  -- Create the directory if it doesn't exist
+  if vim.fn.isdirectory(dirConvert) == 0 then
+    os.execute('mkdir -p ' .. dirConvert)
+    print("Directory created: " .. dirConvert)
+  end
+
+  local converted_name = absolute_path
+  converted_name = converted_name:gsub('/', '+=')
+  local converted_path = dirConvert .. "/" .. converted_name .. "-source.png"
+
   local magick_image = nil
 
   -- case 1: non-png, already converted
@@ -300,8 +315,12 @@ local from_file = function(path, options, state)
 
     -- case 3: non-png, not converted
     if magick_image:get_format():lower() ~= "png" then
-      magick_image:set_format("png")
-      magick_image:write(converted_path)
+      if vim.fn.executable('cairosvg') == 1 then
+        os.execute('cairosvg ' .. absolute_path .. ' -o ' .. converted_path)
+        vim.notify('cairosvg: converted svg to png')
+      else
+        vim.notify('cairosvg: not found, install cairosvg with "pip install cairosvg"')
+      end
       source_path = converted_path
     end
   end
