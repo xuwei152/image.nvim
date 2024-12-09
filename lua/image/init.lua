@@ -462,6 +462,10 @@ end
 ---@param path string
 ---@param options? ImageOptions
 api.from_file = function(path, options)
+  if vim.fn.filereadable(path) == 0 and vim.api.nvim_get_mode().mode == "n" and (string.sub(path, -#"png") == "png" or string.sub(path, -#"svg") == "svg" or string.sub(path, -#"jpg") == "jpg") then
+    vim.notify("File not found: " .. path, vim.log.levels.ERROR)
+  end
+
   guard_setup()
   local image = require("image/image")
   return image.from_file(path, options, state)
