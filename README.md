@@ -1,6 +1,16 @@
 # 🖼️ image.nvim
 
-This plugin adds image support to Neovim using [Kitty's Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) or [ueberzugpp](https://github.com/jstkdng/ueberzugpp).
+This is a fork from [image.nvim](https://github.com/3rd/image.nvim).
+
+The modifications includes:
+
+- Merging master and feat/toggle-rendering branches
+- Adding converted non-png files to a directory without certain names, to avoiding reduandant conversions
+  - Using [cairosvg](https://cairosvg.org/) to convert svg to png
+    - It is better than ImageMagick
+- Notifying if a file is not existed 
+
+The [image.nvim](https://github.com/3rd/image.nvim) adds image support to Neovim using [Kitty's Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/) or [ueberzugpp](https://github.com/jstkdng/ueberzugpp).
 \
 It works great with Kitty and Tmux, and it handles all the rendering complexity for you.
 
