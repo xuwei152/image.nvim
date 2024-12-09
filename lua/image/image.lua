@@ -237,6 +237,10 @@ local from_file = function(path, options, state)
     if existing_image then return existing_image end
   end
 
+  if vim.fn.filereadable(path) == 0 then
+    vim.notify('File not found: ' .. path, vim.log.levels.ERROR)
+  end
+
   local absolute_path = vim.fn.fnamemodify(path, ":p")
   if not vim.loop.fs_stat(absolute_path) then utils.throw(("image.nvim: file not found: %s"):format(absolute_path)) end
 
