@@ -306,8 +306,8 @@ api.setup = function(options)
 
   -- auto-toggle on editor focus change
   if
-    state.options.editor_only_render_when_focused
-    or (state.options.tmux_show_only_in_active_window and utils.tmux.is_tmux)
+      state.options.editor_only_render_when_focused
+      or (state.options.tmux_show_only_in_active_window and utils.tmux.is_tmux)
   then
     local images_to_restore_on_focus = {}
     local initial_tmux_window_id = utils.tmux.get_window_id()
@@ -322,9 +322,9 @@ api.setup = function(options)
         vim.schedule(function()
           -- utils.debug("FocusLost")
           if
-            state.options.editor_only_render_when_focused
-            or (utils.tmux.is_tmux and utils.tmux.get_window_id() ~= initial_tmux_window_id)
-            or (utils.tmux.is_tmux and utils.tmux.get_current_session() ~= initial_tmux_session)
+              state.options.editor_only_render_when_focused
+              or (utils.tmux.is_tmux and utils.tmux.get_window_id() ~= initial_tmux_window_id)
+              or (utils.tmux.is_tmux and utils.tmux.get_current_session() ~= initial_tmux_session)
           then
             state.disable_decorator_handling = true
 
@@ -499,10 +499,10 @@ api.get_images = function(opts)
   for _, current_image in pairs(state.images) do
     if (namespace and current_image.namespace == namespace) or not namespace then
       if
-        (opts and opts.window and opts.window == current_image.window and not opts.buffer)
-        or (opts and opts.buffer and opts.buffer == current_image.buffer and not opts.window)
-        or (opts and opts.window and opts.buffer and opts.window == current_image.window and opts.buffer == current_image.buffer)
-        or not opts
+          (opts and opts.window and opts.window == current_image.window and not opts.buffer)
+          or (opts and opts.buffer and opts.buffer == current_image.buffer and not opts.window)
+          or (opts and opts.window and opts.buffer and opts.window == current_image.window and opts.buffer == current_image.buffer)
+          or not opts
       then
         table.insert(images, current_image)
       end
