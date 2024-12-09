@@ -45,6 +45,8 @@ end
 
 ---@param geometry? ImageGeometry
 function Image:render(geometry)
+  if not self.global_state.enabled then return end
+
   if geometry then self.geometry = vim.tbl_deep_extend("force", self.geometry, geometry) end
 
   -- don't render if we are in the conmmand-line-window, in this case previously rendered images can
@@ -256,6 +258,9 @@ local from_file = function(path, options, state)
     end
   end
 
+  
+
+
   -- bail if not an image
   if not utils.magic.is_image(absolute_original_path) then
     utils.debug(("image.nvim: not an image: %s"):format(absolute_original_path))
@@ -305,8 +310,24 @@ local from_file = function(path, options, state)
   local id = opts.id or utils.random.id()
 
   -- convert non-png images to png and read the dimensions
+
   local source_path = absolute_original_path
-  local converted_path = state.tmp_dir .. "/" .. vim.base64.encode(id) .. "-source.png"
+
+  local dirConvert = '~/Trash/imageConvert'
+  -- Expand the '~' to the full path
+  local home = os.getenv('HOME') or '.' -- Use fallback if HOME is nil
+  dirConvert = dirConvert:gsub('~', home)
+
+  -- Create the directory if it doesn't exist
+  if vim.fn.isdirectory(dirConvert) == 0 then
+    os.execute('mkdir -p ' .. dirConvert)
+    print("Directory created: " .. dirConvert)
+  end
+
+  local converted_name = absolute_original_path
+  converted_name = converted_name:gsub('/', '+=')
+  local converted_path = dirConvert .. "/" .. converted_name .. "-source.png"
+
 
   -- case 1: non-png, already converted
   if
@@ -317,8 +338,16 @@ local from_file = function(path, options, state)
   else
     local format = state.processor.get_format(absolute_original_path)
     -- case 3: non-png, not converted
-    if format ~= "png" then source_path = state.processor.convert_to_png(absolute_original_path, converted_path) end
     -- case 2: png
+    if format ~= "png" then
+      if vim.fn.executable('cairosvg') == 1 then
+        os.execute('cairosvg ' .. absolute_original_path .. ' -o ' .. converted_path)
+        vim.notify('cairosvg: converted svg to png')
+      else
+        vim.notify('cairosvg: not found, install cairosvg with "pip install cairosvg"')
+      end
+      source_path = converted_path
+    end
   end
 
   local dimensions = state.processor.get_dimensions(source_path)
