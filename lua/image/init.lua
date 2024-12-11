@@ -35,8 +35,8 @@ local default_options = {
   kitty_method = "normal",
   window_overlap_clear_enabled = false,
   window_overlap_clear_ft_ignore = { "cmp_menu", "cmp_docs", "scrollview", "scrollview_sign" },
-  editor_only_render_when_focused = false,
-  tmux_show_only_in_active_window = false,
+  editor_only_render_when_focused = true,
+  tmux_show_only_in_active_window = true,
   hijack_file_patterns = { "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.avif" },
 }
 
