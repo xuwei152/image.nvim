@@ -339,7 +339,7 @@ local from_file = function(path, options, state)
     local format = state.processor.get_format(absolute_original_path)
     -- case 3: non-png, not converted
     -- case 2: png
-    if format ~= "png" then
+    if format ~= "png" and format ~= "jpg" and format ~= "jpeg" then
       if vim.fn.executable('cairosvg') == 1 then
         os.execute('cairosvg ' .. absolute_original_path .. ' -o ' .. converted_path)
         vim.notify('cairosvg: converted svg to png')
