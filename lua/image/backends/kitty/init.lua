@@ -1,6 +1,7 @@
 local codes = require("image/backends/kitty/codes")
 local helpers = require("image/backends/kitty/helpers")
 local utils = require("image/utils")
+local log = require("image/utils/logger").within("backend.kitty")
 
 local editor_tty = utils.term.get_tty()
 local is_SSH = (vim.env.SSH_CLIENT ~= nil) or (vim.env.SSH_TTY ~= nil)
@@ -58,7 +59,7 @@ backend.render = function(image, x, y, width, height)
     }
     if with_virtual_placeholders then transmit_payload.display_virtual_placeholder = 1 end
     helpers.write_graphics(transmit_payload, image.cropped_path)
-    -- utils.debug("[kitty] transmitted image " .. image.id .. " (" .. image.internal_id .. ")")
+    log.debug("transmitted image " .. image.id .. " (" .. image.internal_id .. ")")
   end
   if backend.features.crop then
     local preprocessing_hash = ("%s-%s"):format(image.id, image.resize_hash)
@@ -76,6 +77,10 @@ backend.render = function(image, x, y, width, height)
 
   -- unicode placeholders
   if with_virtual_placeholders then
+    if backend.state.images[image.id] and backend.state.images[image.id] ~= image then
+      backend.state.images[image.id]:clear(true)
+    end
+
     helpers.write_graphics({
       action = codes.control.action.display,
       quiet = 2,
@@ -139,6 +144,10 @@ backend.render = function(image, x, y, width, height)
     display_payload.display_x = pixel_left
   end
 
+  if backend.state.images[image.id] and backend.state.images[image.id] ~= image then
+    backend.state.images[image.id]:clear(true)
+  end
+
   helpers.update_sync_start()
   helpers.move_cursor(x + 1, y + 1, true)
   helpers.write_graphics(display_payload)
@@ -148,7 +157,7 @@ backend.render = function(image, x, y, width, height)
   backend.state.images[image.id] = image
   image.is_rendered = true
 
-  -- utils.debug("path:", image.cropped_path, display_payload)
+  log.debug("path:", { path = image.cropped_path, payload = display_payload })
 end
 
 local get_clear_tty_override = function()
@@ -180,7 +189,7 @@ backend.clear = function(image_id, shallow)
       backend.state.images[image_id] = nil
       transmitted_images[image.id] = nil
     end
-    -- utils.debug("[kitty] cleared image", image.id, "(" .. image.internal_id .. ")", "shallow:", shallow)
+    log.debug("cleared image", { id = image.id, internal_id = image.internal_id, shallow = shallow })
     return
   end
 
@@ -192,14 +201,14 @@ backend.clear = function(image_id, shallow)
     tty = get_clear_tty_override(),
   })
 
-  -- utils.debug("[kitty] cleared all")
+  log.debug("cleared all")
   for id, image in pairs(backend.state.images) do
     image.is_rendered = false
     if not shallow then
       backend.state.images[id] = nil
       transmitted_images[image.id] = nil
     end
-    -- utils.debug("[kitty] cleared image (all)", image.id, "shallow:", shallow)
+    log.debug("cleared image (all)", { id = image.id, shallow = shallow })
   end
 end
 

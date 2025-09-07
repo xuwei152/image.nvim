@@ -27,20 +27,34 @@ Try it out quickly by downloading [minimal-setup.lua](./minimal-setup.lua) from 
 
 ## Getting started
 
+### Quick start for the best experience
+
+1. Install the [Kitty](https://sw.kovidgoyal.net/kitty/) terminal
+2. Install [ImageMagick](#imagemagick)
+3. Install the [plugin](#plugin-installation) and tweak the [configuration](#configuration)
+4. Optionally configure [Tmux](#tmux)
+5. Check the [How to ...?](#how-to-) section
+
 ### Dependencies
 
 #### Rendering backend
 
-We support two rendering backends, so first you need to set up one of these:
+We support three rendering backends, so first you need to set up one of these:
 
 1. [Kitty](https://sw.kovidgoyal.net/kitty/) **(recommended)** >= 28.0 for the `kitty` backend
    - Has the best performance, native clipping, caching, etc.
    - You need to use Kitty or a terminal emulator that implements [Kitty's Graphics Protocol](https://sw.kovidgoyal.net/kitty/graphics-protocol/).
    - [WezTerm](https://github.com/wez/wezterm) implements it, but the performance is bad and it's not fully compliant.
      Most things work, but due to these issues it's not _officially supported_.
+   - [Ghostty](https://ghostty.org/) not that much information about this yet! SUBJECT TO CHANGE
 2. [Überzug++](https://github.com/jstkdng/ueberzugpp) for the `ueberzug` backend
    - Works with any terminal emulator.
    - Has much lower performance.
+3. Sixel-supporting terminals for the `sixel` backend
+   - Works with terminals that support the Sixel graphics protocol
+   - Compatible with many terminals including XTerm, WezTerm, foot, and others
+   - No additional dependencies beyond ImageMagick (which must have Sixel support)
+   - Pretty crap performance, although very usable with `only_render_image_at_cursor=true` and `only_render_image_at_cursor_mode="popup"`
 
 #### ImageMagick
 
@@ -48,15 +62,15 @@ We need to convert, scale, and crop images, and for that we use ImageMagick.
 \
 There are two ways we can do this, and you need to pick and follow the setup for the one you prefer.
 
-1. Via FFI bindings (default) - using the `magick_rock` processor and the [magick Lua rock](https://github.com/leafo/magick)
-   - Has slightly better performance.
-   - Requires a working LuaRocks setup and building the magick rock.
-2. Via CLI wrapping - using the `magick_cli` processor
+1. Via CLI wrapping (default) - using the `magick_cli` processor
    - Shells out to ImageMagick's CLI utilities like `identify` and `convert`.
    - Slightly scary in some scenarios as we could potentially pass untrusted input to a shell.
      We try to keep things secure, but this would be the main selling point of using the bindings instead.
+2. Via FFI bindings - using the `magick_rock` processor and the [magick Lua rock](https://github.com/leafo/magick)
+   - Has slightly better performance.
+   - Requires a working LuaRocks setup and building the magick rock.
 
-For the `magick_cli` processor you need a regular installation of ImageMagick.
+For the `magick_cli` processor (default) you need a regular installation of ImageMagick.
 \
 For the `magick_rock` processor you need to install the development version of ImageMagick.
 
@@ -119,13 +133,13 @@ For `magick_rock` you need to install `luajitPackages.magick` as well ([thanks](
 <summary>Arch</summary>
 
 ```sh
-sudo pacman -Syu imagemagick
+sudo pacman -S imagemagick
 ```
 
 </details>
 
 <details>
-<summary>Ubuntu</summary>
+<summary>Ubuntu/Debian</summary>
 
 ```sh
 # for magick_cli
@@ -172,23 +186,142 @@ This plugin will always have first class support for Tmux, to make it work make 
 
 - [cURL](https://github.com/curl/curl) for remote image support
 
+#### Extra: Installing Überzug++
+<details>
+<summary>NixOS</summary>
+
+NixOS users need to install the `ueberzugpp` package.
+
+- <details>
+  <summary>Home Manager</summary>
+
+  ```nix
+  { pkgs, ... }:
+
+  {
+    programs.neovim = {
+        enable = true;
+        extraLuaPackages = ps: [ ps.magick ];
+        extraPackages = [
+          pkgs.ueberzugpp
+          pkgs.imagemagick
+        ];
+        # ... other config
+    };
+  }
+  ```
+  </details>
+- <details>
+    <summary>Vanilla NixOS</summary>
+
+  ```nix
+  # https://github.com/NixOS/nixpkgs/blob/master/pkgs/applications/editors/neovim/utils.nix#L27
+  { pkgs, neovimUtils, wrapNeovimUnstable, ... }:
+
+  let
+  config = pkgs.neovimUtils.makeNeovimConfig {
+    extraLuaPackages = p: [ p.magick ];
+    extraPackages = p: [
+      p.ueberzugpp
+      p.imagemagick
+    ];
+    # ... other config
+  };
+  in {
+    nixpkgs.overlays = [
+        (_: super: {
+        neovim-custom = pkgs.wrapNeovimUnstable
+            (super.neovim-unwrapped.overrideAttrs (oldAttrs: {
+            buildInputs = oldAttrs.buildInputs ++ [ super.tree-sitter ];
+            })) config;
+        })
+    ];
+    environment.systemPackages = with pkgs; [ neovim-custom ];
+  }
+  ```
+
+  </details>
+  </details>
+   <details>
+   <summary>Pip</summary>
+
+```sh
+sudo pip install ueberzugpp
+```
+
+   </details>
+
+   <details>
+   <summary>Arch</summary>
+
+```sh
+sudo pacman -S ueberzugpp
+```
+
+   </details>
+
+   <details>
+   <summary>Ubuntu/Debian/Fedora</summary>
+
+Follow instructions on [this link](https://software.opensuse.org/download.html?project=home%3Ajustkidding&package=ueberzugpp)
+
+   </details>
+
+   <details>
+   <summary>macOS</summary>
+
+- Homebrew: `brew install jstkdng/programs/ueberzugpp`
+- **For some users** homebrew might install it into a weird location, so you have to add `$(brew --prefix)/lib` to `DYLD_FALLBACK_LIBRARY_PATH` by adding something like `export DYLD_FALLBACK_LIBRARY_PATH="$(brew -- prefix)/lib:$DYLD_FALLBACK_LIBRARY_PATH"` to your shell profile (probably `.zshrc` or `.bashrc`)
+- Setup the configuration
+  - Put this in `~/.config/ueberzugpp/config.json` (the same for MacOS):
+    ```
+    {
+        "layer": {
+            "silent": true,
+            "use-escape-codes": false,
+            "no-stdin": false,
+            "_comment": "Replace wayland in output with iterm2, if you want ssh support, x11 if you want to use it in xorg, sixel if you want to use sixels, chafa if you want to use the terminal colors.",
+            "_comment2": "Kitty is not mentioned in the list above, because image.nvim has native support for it.",
+            "output": "wayland"
+        }
+    }
+    ```
+  - You can remove the lines with `_comment` and `_comment2`, once you have tried every available option until one or more worked!
+  </details>
+
 ### Plugin installation
 
 After you've set up the dependencies, install the `image.nvim` plugin.
+
+<details>
+<summary><b>For magick_cli using Lazy</b></summary>
+
+```lua
+{
+    "3rd/image.nvim",
+    build = false, -- so that it doesn't build the rock https://github.com/3rd/image.nvim/issues/91#issuecomment-2453430239
+    opts = {
+        processor = "magick_cli",
+    }
+}
+```
+
+</details>
 
 <details>
 <summary><b>For magick_rock using Lazy >= v11.*</b></summary>
 
 ```lua
 require("lazy").setup({
-    {
-        "3rd/image.nvim",
-        opts = {}
-    },
-}, {
     rocks = {
         hererocks = true,  -- recommended if you do not have global installation of Lua 5.1.
     },
+    spec = {
+        {
+            "3rd/image.nvim",
+            opts = {}
+        },
+    }
 })
 ```
 
@@ -247,33 +380,21 @@ package.path = package.path .. ";" .. vim.fn.expand("$HOME") .. "/.luarocks/shar
 
 </details>
 
-<details>
-<summary><b>For magick_cli using Lazy</b></summary>
-
-```lua
-{
-    "3rd/image.nvim",
-    build = false, -- so that it doesn't build the rock https://github.com/3rd/image.nvim/issues/91#issuecomment-2453430239
-    opts = {}
-}
-```
-
-</details>
-
 ## Configuration
 
 ### Default configuration
 
 ```lua
 require("image").setup({
-  backend = "kitty",
-  processor = "magick_rock", -- or "magick_cli"
+  backend = "kitty", -- or "ueberzug" or "sixel"
+  processor = "magick_cli", -- or "magick_rock"
   integrations = {
     markdown = {
       enabled = true,
       clear_in_insert_mode = false,
       download_remote_images = true,
       only_render_image_at_cursor = false,
+      only_render_image_at_cursor_mode = "popup", -- or "inline"
       floating_windows = false, -- if true, images will be rendered in floating markdown windows
       filetypes = { "markdown", "vimwiki" }, -- markdown extensions (ie. quarto) can go here
     },
@@ -296,8 +417,9 @@ require("image").setup({
   max_height = nil,
   max_width_window_percentage = nil,
   max_height_window_percentage = 50,
+  scale_factor = 1.0,
   window_overlap_clear_enabled = false, -- toggles images when windows are overlapped
-  window_overlap_clear_ft_ignore = { "cmp_menu", "cmp_docs", "" },
+  window_overlap_clear_ft_ignore = { "cmp_menu", "cmp_docs", "snacks_notif", "scrollview", "scrollview_sign" },
   editor_only_render_when_focused = false, -- auto show/hide images when the editor gains/looses focus
   tmux_show_only_in_active_window = false, -- auto show/hide images in the correct Tmux window (needs visual-activity off)
   hijack_file_patterns = { "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.avif" }, -- render image files as images when opened
@@ -311,6 +433,9 @@ All the backends support rendering inside Tmux.
 - `kitty` - best in class, works great and is very snappy
 - `ueberzug` - backed by [ueberzugpp](https://github.com/jstkdng/ueberzugpp), supports any terminal, but has lower performance
   - Supports multiple images thanks to [@jstkdng](https://github.com/jstkdng/ueberzugpp/issues/74).
+- `sixel` - uses the Sixel graphics protocol, widely supported by many terminals
+  - Works with XTerm, WezTerm, foot, and other Sixel-compatible terminals
+  - ImageMagick is required for Sixel encoding
 
 ### Integrations
 
@@ -340,6 +465,42 @@ require('image').setup({
 ```
 
 Check https://github.com/3rd/image.nvim/issues/190#issuecomment-2378156235 for how to configure this for Obsidian.
+
+## How to ...?
+
+#### General
+
+<details>
+<summary>Enable / disable / get plugin status</summary>
+
+You can enable/disable the plugin and check its status on demand.
+
+```lua
+require("image").enable() -- enable the plugin
+require("image").disable() -- disable the plugin
+print(require("image").is_enabled()) -- bool
+```
+
+</details>
+
+#### Integrations
+
+<details>
+<summary>Render images only when under the cursor</summary>
+
+This is a built-in feature that you can configure per-integration using the following options:
+
+```lua
+require("image").setup({
+  integrations = {
+    markdown = {
+        only_render_image_at_cursor = true, -- defaults to false
+        only_render_image_at_cursor_mode = "popup", -- "popup" or "inline", defaults to "popup"
+    }
+})
+```
+
+</details>
 
 ## API
 

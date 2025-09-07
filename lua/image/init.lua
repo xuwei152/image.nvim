@@ -1,12 +1,20 @@
 local utils = require("image/utils")
 local processors = require("image/processors")
 local report = require("image/report")
+local logger = require("image/utils/logger")
+local log = logger.within("core")
 
 ---@type Options
 local default_options = {
   -- backend = "ueberzug",
   backend = "kitty",
-  processor = "magick_rock",
+  processor = "magick_cli",
+  debug = {
+    enabled = false,
+    level = "debug",
+    file_path = "/tmp/image.nvim.log",
+    format = "compact",
+  },
   integrations = {
     markdown = {
       enabled = true,
@@ -26,6 +34,9 @@ local default_options = {
     css = {
       enabled = false,
     },
+    org = {
+      enabled = false,
+    },
   },
   max_width = nil,
   max_height = nil,
@@ -34,9 +45,10 @@ local default_options = {
   scale_factor = 1.0,
   kitty_method = "normal",
   window_overlap_clear_enabled = false,
-  window_overlap_clear_ft_ignore = { "cmp_menu", "cmp_docs", "scrollview", "scrollview_sign" },
+  window_overlap_clear_ft_ignore = { "cmp_menu", "cmp_docs", "snacks_notif", "scrollview", "scrollview_sign" },
   editor_only_render_when_focused = true,
   tmux_show_only_in_active_window = true,
+  gnore_download_error = false,
   hijack_file_patterns = { "*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.avif" },
 }
 
@@ -65,6 +77,11 @@ api.setup = function(options)
   local opts = vim.tbl_deep_extend("force", default_options, options or {})
   state.options = opts
 
+  -- setup logger with debug configuration
+  if opts.debug then
+    logger.setup(opts.debug)
+  end
+
   vim.schedule(function()
     if opts.processor == "magick_rock" then
       local magick = require("image/magick")
@@ -90,8 +107,14 @@ api.setup = function(options)
   -- load integrations
   for integration_name, integration_options in pairs(opts.integrations) do
     if integration_options.enabled then
-      local integration = require("image/integrations/" .. integration_name)
-      if type(integration.setup) == "function" then integration.setup(api, integration_options, state) end
+      log.debug("Loading integration: " .. integration_name)
+      local ok, integration = pcall(require, "image/integrations/" .. integration_name)
+      if not ok then
+        log.error("Failed to load integration: " .. integration_name, integration)
+      elseif type(integration.setup) == "function" then
+        integration.setup(api, integration_options, state)
+        log.debug("Setup integration: " .. integration_name)
+      end
     end
   end
 
@@ -188,7 +211,7 @@ api.setup = function(options)
         { topline = topline, botline = botline, bufnr = bufnr, height = height, folded_lines = folded_lines }
 
       -- execute deferred clear / rerender
-      -- utils.debug("needs_clear", needs_clear, "needs_rerender", needs_rerender)
+      log.debug("needs_clear", { needs_clear = needs_clear, needs_rerender = needs_rerender })
       vim.schedule(function()
         if needs_clear then
           for _, curr in ipairs(api.get_images({ window = winid, buffer = prev.bufnr })) do
@@ -262,6 +285,10 @@ api.setup = function(options)
       if not state.enabled then return end
 
       local images = api.get_images({ window = tonumber(au.file) })
+
+      -- bail if there are no images
+      if #images == 0 then return end
+
       for _, current_image in ipairs(images) do
         current_image:render()
       end
@@ -269,7 +296,7 @@ api.setup = function(options)
   })
 
   -- force rerender on resize (handles VimResized as well)
-  vim.api.nvim_create_autocmd({ "WinResized" }, {
+  vim.api.nvim_create_autocmd({ "WinResized", "WinNew" }, {
     group = group,
     callback = function()
       -- bail if not enabled
@@ -277,7 +304,10 @@ api.setup = function(options)
 
       local images = api.get_images()
       for _, current_image in ipairs(images) do
-        if current_image.window ~= nil then current_image:render() end
+        if current_image.window ~= nil then
+          current_image:clear()
+          current_image:render()
+        end
       end
     end,
   })
@@ -306,8 +336,8 @@ api.setup = function(options)
 
   -- auto-toggle on editor focus change
   if
-      state.options.editor_only_render_when_focused
-      or (state.options.tmux_show_only_in_active_window and utils.tmux.is_tmux)
+    state.options.editor_only_render_when_focused
+    or (state.options.tmux_show_only_in_active_window and utils.tmux.is_tmux)
   then
     local images_to_restore_on_focus = {}
     local initial_tmux_window_id = utils.tmux.get_window_id()
@@ -320,11 +350,11 @@ api.setup = function(options)
         if not state.enabled then return end
 
         vim.schedule(function()
-          -- utils.debug("FocusLost")
+          log.debug("FocusLost")
           if
-              state.options.editor_only_render_when_focused
-              or (utils.tmux.is_tmux and utils.tmux.get_window_id() ~= initial_tmux_window_id)
-              or (utils.tmux.is_tmux and utils.tmux.get_current_session() ~= initial_tmux_session)
+            state.options.editor_only_render_when_focused
+            or (utils.tmux.is_tmux and utils.tmux.get_window_id() ~= initial_tmux_window_id)
+            or (utils.tmux.is_tmux and utils.tmux.get_current_session() ~= initial_tmux_session)
           then
             state.disable_decorator_handling = true
 
@@ -346,7 +376,7 @@ api.setup = function(options)
         -- bail if not enabled
         if not state.enabled then return end
 
-        -- utils.debug("FocusGained")
+        log.debug("FocusGained")
 
         state.disable_decorator_handling = false
 
@@ -372,7 +402,11 @@ api.setup = function(options)
 
   -- hijack image filetypes
   if state.options.hijack_file_patterns and #state.options.hijack_file_patterns > 0 then
-    vim.api.nvim_create_autocmd("BufReadCmd", {
+    vim.api.nvim_create_autocmd({
+      "WinNew",
+      "BufWinEnter",
+      "TabEnter",
+    }, {
       group = group,
       pattern = state.options.hijack_file_patterns,
       callback = function(event)
@@ -428,12 +462,6 @@ api.hijack_buffer = function(path, win, buf, options)
   if not win or win == 0 then win = vim.api.nvim_get_current_win() end
   if not buf or buf == 0 then buf = vim.api.nvim_get_current_buf() end
 
-  local key = ("%s:%s"):format(win, buf)
-  if state.hijacked_win_buf_images[key] then
-    state.hijacked_win_buf_images[key]:render()
-    return state.hijacked_win_buf_images[key]
-  end
-
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, true, { "" })
 
@@ -445,14 +473,33 @@ api.hijack_buffer = function(path, win, buf, options)
   vim.opt_local.number = false
   vim.opt_local.signcolumn = "no"
 
+  local key = ("%s:%s"):format(win, buf)
+  if state.hijacked_win_buf_images[key] then
+    state.hijacked_win_buf_images[key]:render()
+    return state.hijacked_win_buf_images[key]
+  end
+
   local opts = options or {}
   opts.window = win
   opts.buffer = buf
+  -- For hijacked buffers, position image at line 1, column 0 (1-indexed for vim)
+  if not opts.x then opts.x = 0 end
+  if not opts.y then opts.y = 1 end
 
   local img = api.from_file(path, opts)
 
   if img then
-    img:render()
+    -- wait for vimenter
+    if vim.v.vim_did_enter == 1 then
+      img:render()
+    else
+      vim.api.nvim_create_autocmd("VimEnter", {
+        once = true,
+        callback = function()
+          img:render()
+        end,
+      })
+    end
     state.hijacked_win_buf_images[key] = img
   end
 
@@ -462,10 +509,6 @@ end
 ---@param path string
 ---@param options? ImageOptions
 api.from_file = function(path, options)
-  if vim.fn.filereadable(path) == 0 and vim.api.nvim_get_mode().mode == "n" and (string.sub(path, -#"png") == "png" or string.sub(path, -#"svg") == "svg" or string.sub(path, -#"jpg") == "jpg") then
-    vim.notify("File not found: " .. path, vim.log.levels.ERROR)
-  end
-
   guard_setup()
   local image = require("image/image")
   return image.from_file(path, options, state)
@@ -499,10 +542,10 @@ api.get_images = function(opts)
   for _, current_image in pairs(state.images) do
     if (namespace and current_image.namespace == namespace) or not namespace then
       if
-          (opts and opts.window and opts.window == current_image.window and not opts.buffer)
-          or (opts and opts.buffer and opts.buffer == current_image.buffer and not opts.window)
-          or (opts and opts.window and opts.buffer and opts.window == current_image.window and opts.buffer == current_image.buffer)
-          or not opts
+        (opts and opts.window and opts.window == current_image.window and not opts.buffer)
+        or (opts and opts.buffer and opts.buffer == current_image.buffer and not opts.window)
+        or (opts and opts.window and opts.buffer and opts.window == current_image.window and opts.buffer == current_image.buffer)
+        or not opts
       then
         table.insert(images, current_image)
       end

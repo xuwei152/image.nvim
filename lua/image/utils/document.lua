@@ -1,5 +1,8 @@
 ---@diagnostic disable: duplicate-doc-field
 local utils = require("image/utils")
+local logger = require("image/utils/logger")
+
+local popup_window = nil
 
 local resolve_absolute_path = function(document_file_path, image_path)
   if string.sub(image_path, 1, 1) == "/" then return image_path end
@@ -43,20 +46,21 @@ end
 
 ---@param config DocumentIntegrationConfig
 local create_document_integration = function(config)
-  local trace = function(...)
-    if config.debug then utils.log("[" .. config.name .. "]", ...) end
-  end
+  local log = logger.within("integration." .. config.name)
 
   local render = vim.schedule_wrap(
     ---@param ctx IntegrationContext
     function(ctx)
-      local windows = utils.window.get_windows({ normal = true, floating = ctx.options.floating_windows })
+      if not ctx.state.enabled then return end
 
+      local windows = utils.window.get_windows({ normal = true, floating = ctx.options.floating_windows })
       local image_queue = {}
 
       for _, window in ipairs(windows) do
         if has_valid_filetype(ctx, window.buffer_filetype) then
+          log.debug("Querying buffer images for window", { window_id = window.id, buffer = window.buffer })
           local matches = config.query_buffer_images(window.buffer)
+          log.debug("Found matches", { count = #matches })
           local previous_images = ctx.api.get_images({
             window = window.id,
             buffer = window.buffer,
@@ -75,7 +79,10 @@ local create_document_integration = function(config)
               utils.hash.sha256(match.url)
             )
 
-            if ctx.options.only_render_image_at_cursor and match.range.start_row ~= cursor_row then goto continue end
+            if ctx.options.only_render_image_at_cursor and match.range.start_row ~= cursor_row then
+              log.debug("Skipping image not at cursor", { id = id })
+              goto continue
+            end
 
             local to_render = {
               id = id,
@@ -83,6 +90,7 @@ local create_document_integration = function(config)
               window = window,
               file_path = file_path,
             }
+            log.debug("Adding image to queue", { id = id, url = match.url })
             table.insert(image_queue, to_render)
             table.insert(new_image_ids, id)
 
@@ -97,21 +105,81 @@ local create_document_integration = function(config)
       end
 
       -- render images from queue
+      log.debug("Processing image queue", { count = #image_queue })
       for _, item in ipairs(image_queue) do
         local render_image = function(image)
-          image:render({
-            x = item.match.range.start_col,
-            y = item.match.range.start_row,
-          })
+          log.debug("render_image called", { id = image.id })
+          if ctx.options.only_render_image_at_cursor and ctx.options.only_render_image_at_cursor_mode == "popup" then
+            if popup_window ~= nil then return end
+
+            -- Create a floating window for the image
+            local term_size = utils.term.get_size()
+            local width, height = utils.math.adjust_to_aspect_ratio(
+              term_size,
+              image.image_width,
+              image.image_height,
+              math.floor(term_size.screen_cols / 2),
+              0
+            )
+            local win_config = {
+              relative = "cursor",
+              row = 1,
+              col = 0,
+              width = width,
+              height = height,
+              style = "minimal",
+              border = "single",
+            }
+            local buf = vim.api.nvim_create_buf(false, true)
+            vim.bo[buf].filetype = "image_nvim_popup"
+            local win = vim.api.nvim_open_win(buf, false, win_config)
+            popup_window = win
+
+            image.ignore_global_max_size = true
+            image.window = win
+            image.buffer = buf
+
+            -- render after window is open
+            vim.defer_fn(function()
+              if vim.api.nvim_win_is_valid(win) then
+                local win_info = vim.fn.getwininfo(win)[1]
+                if win_info and win_info.wincol > 0 then
+                  image:render({
+                    x = 0,
+                    y = 0,
+                    width = width,
+                    height = height,
+                  })
+                end
+              end
+            end, 10)
+            -- close the floating window when the cursor moves
+            vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+              callback = function()
+                if vim.api.nvim_win_is_valid(win) then vim.api.nvim_win_close(win, true) end
+                image:clear()
+                popup_window = nil
+              end,
+              once = true,
+            })
+          else
+            image:render({
+              x = item.match.range.start_col,
+              y = item.match.range.start_row,
+            })
+          end
         end
 
         if is_remote_url(item.match.url) then
           if ctx.options.download_remote_images then
+            local is_popup = ctx.options.only_render_image_at_cursor
+              and ctx.options.only_render_image_at_cursor_mode == "popup"
             pcall(ctx.api.from_url, item.match.url, {
               id = item.id,
               window = item.window.id,
               buffer = item.window.buffer,
-              with_virtual_padding = true,
+              with_virtual_padding = not is_popup,
+              render_offset_top = is_popup and 0 or 1,
               namespace = config.name,
             }, function(image)
               if not image then return end
@@ -127,14 +195,24 @@ local create_document_integration = function(config)
           else
             path = resolve_absolute_path(item.file_path, item.match.url)
           end
+          local is_popup = ctx.options.only_render_image_at_cursor
+            and ctx.options.only_render_image_at_cursor_mode == "popup"
+          local padding = is_popup and 0 or 1
+          log.debug("Creating image from file", { path_type = type(path), path_string = tostring(path), id = item.id })
           local ok, image = pcall(ctx.api.from_file, path, {
             id = item.id,
             window = item.window.id,
             buffer = item.window.buffer,
-            with_virtual_padding = true,
+            with_virtual_padding = not is_popup,
+            render_offset_top = padding,
             namespace = config.name,
           })
-          if ok and image then render_image(image) end
+          if ok and image then
+            log.debug("Image created successfully", { id = item.id })
+            render_image(image)
+          else
+            log.debug("Failed to create image", { id = item.id, error = image })
+          end
         end
       end
     end

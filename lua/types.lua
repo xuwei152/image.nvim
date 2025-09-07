@@ -28,14 +28,21 @@
 ---@field download_remote_images? boolean
 ---@field clear_in_insert_mode? boolean
 ---@field only_render_image_at_cursor? boolean
+---@field only_render_image_at_cursor_mode? "inline"|"popup"
 ---@field filetypes? string[]
 ---@field resolve_image_path? function
 ---@field floating_windows? boolean
 
 ---@alias IntegrationOptions DocumentIntegrationOptions
 
+---@class DebugOptions
+---@field enabled? boolean
+---@field level? "debug"|"info"|"warn"|"error"
+---@field file_path? string
+---@field format? "compact"|"detailed"
+
 ---@class Options
----@field backend "kitty"|"ueberzug"
+---@field backend "kitty"|"ueberzug"|"sixel"
 ---@field integrations table<string, IntegrationOptions>
 ---@field max_width? number
 ---@field max_height? number
@@ -47,8 +54,10 @@
 ---@field window_overlap_clear_ft_ignore? string[]
 ---@field editor_only_render_when_focused? boolean
 ---@field tmux_show_only_in_active_window? boolean
+---@field ignore_download_error? boolean
 ---@field hijack_file_patterns? string[]
 ---@field processor? string
+---@field debug? DebugOptions
 
 ---@class BackendFeatures
 ---@field crop boolean
@@ -63,6 +72,8 @@
 ---@class ImageGeometry
 ---@field x? number
 ---@field y? number
+---@field row? number
+---@field col? number
 ---@field width? number
 ---@field height? number
 
@@ -75,6 +86,7 @@
 ---@field namespace? string
 ---@field max_width_window_percentage? number
 ---@field max_height_window_percentage? number
+---@field render_offset_top? number
 
 ---@class ImageBounds
 ---@field top number
@@ -130,6 +142,8 @@
 ---@field extmark? { id: number, row: number, col: number }
 ---@field last_modified? number
 ---@field has_extmark_moved fun (self:Image): (boolean, number?, number?)
+---@field ignore_global_max_size? boolean
+---@field render_offset_top? number
 
 ---@class ImageProcessor
 --- We need to:

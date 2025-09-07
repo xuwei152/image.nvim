@@ -1,11 +1,12 @@
 local utils = require("image/utils")
+local log = require("image/utils/logger").within("backend.ueberzug")
 
 local child = nil
 local should_be_alive = false
 
 local spawn = function()
   local stdin = vim.loop.new_pipe()
-  local stdout = vim.loop.new_pipe()
+  local stdout = vim.loop.new_tty(1, false)
   local stderr = vim.loop.new_pipe()
   should_be_alive = true
 
@@ -27,7 +28,7 @@ local spawn = function()
 
   local write = function(data)
     local serialized = vim.fn.json_encode(data)
-    -- utils.debug("ueberzug:stdin", serialized)
+    log.debug("stdin", { data = serialized })
     vim.loop.write(stdin, serialized .. "\n")
   end
 
