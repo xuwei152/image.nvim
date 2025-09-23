@@ -344,11 +344,28 @@ local from_file = function(path, options, state)
     -- case 3: non-png, not converted
     -- case 2: png
     if format ~= "png" and format ~= "jpg" and format ~= "jpeg" then
-      if vim.fn.executable('cairosvg') == 1 then
-        os.execute('cairosvg ' .. absolute_original_path .. ' -o ' .. converted_path)
-        vim.notify('cairosvg: converted svg to png')
-      else
-        vim.notify('cairosvg: not found, install cairosvg with "pip install cairosvg"')
+      if format == "svg" then
+        if vim.fn.executable('cairosvg') == 1 then
+          os.execute('cairosvg ' .. absolute_original_path .. ' -o ' .. converted_path)
+          vim.notify('cairosvg: converted svg to png')
+        else
+          vim.notify('cairosvg: not found, install cairosvg with "pip install cairosvg"')
+        end
+      elseif format == "pdf" then
+        if vim.fn.executable('qpdf') == 1 then
+          local nPages = tonumber(io.popen("qpdf --show-npages " .. absolute_original_path):read("*a"))
+          if nPages > 1 then
+            vim.notify('pdf has multiple pages, only the first page will be converted')
+          end
+        else
+          vim.notify('qpdf: not found, install qpdf to check number of pages')
+        end
+        if vim.fn.executable('pdftoppm') == 1 then
+          os.execute('pdftoppm -png -singlefile ' .. absolute_original_path .. ' ' .. converted_path:gsub('.png', ''))
+          vim.notify('pdftoppm: converted pdf to png')
+        else
+          vim.notify('pdftoppm: not found, install poppler-utils')
+        end
       end
       source_path = converted_path
     end
