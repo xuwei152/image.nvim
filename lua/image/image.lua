@@ -363,6 +363,8 @@ local from_file = function(path, options, state)
         else
           vim.notify('pdftoppm: not found, install poppler-utils')
         end
+      else
+        vim.notify(format..' file cannot be converted', vim.log.levels.ERROR)
       end
       source_path = converted_path
     end
