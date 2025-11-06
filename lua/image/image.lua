@@ -36,7 +36,7 @@ end
 function Image:has_extmark_moved()
   if not self.extmark then return false end
   local extmark =
-    vim.api.nvim_buf_get_extmark_by_id(self.buffer, self.global_state.extmarks_namespace, self.extmark.id, {})
+      vim.api.nvim_buf_get_extmark_by_id(self.buffer, self.global_state.extmarks_namespace, self.extmark.id, {})
   if extmark then
     local moved = extmark[1] ~= self.extmark.row or extmark[2] ~= self.extmark.col
     return moved, extmark[1], extmark[2]
@@ -332,8 +332,8 @@ local from_file = function(path, options, state)
 
   -- case 1: non-png, already converted
   if
-    vim.fn.filereadable(converted_path) == 1
-    and vim.fn.getftime(converted_path) > vim.fn.getftime(absolute_original_path)
+      vim.fn.filereadable(converted_path) == 1
+      and vim.fn.getftime(converted_path) > vim.fn.getftime(absolute_original_path)
   then
     source_path = converted_path
   else
@@ -344,7 +344,8 @@ local from_file = function(path, options, state)
       if format == "svg" or format == "xml" then -- the svg is also recognized as xml
         if vim.fn.executable('inkscape') == 1 then
           vim.notify('inkscape: converted svg to png')
-          os.execute('inkscape ' .. absolute_original_path .. ' --export-type="png"  --export-filename=' .. converted_path .. ' --export-dpi=300')
+          os.execute('inkscape ' ..
+            absolute_original_path .. ' --export-type="png"  --export-filename=' .. converted_path .. ' --export-dpi=300')
         else
           vim.notify('inkscape: not found')
         end
@@ -364,7 +365,7 @@ local from_file = function(path, options, state)
           vim.notify('pdftoppm: not found, install poppler-utils')
         end
       else
-        vim.notify(format..' file cannot be converted', vim.log.levels.ERROR)
+        vim.notify(format .. ' file cannot be converted', vim.log.levels.ERROR)
       end
       source_path = converted_path
     end
