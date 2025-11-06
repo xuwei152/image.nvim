@@ -606,8 +606,9 @@ api.hide_until_cursor_on_image = function()
   local win = vim.api.nvim_get_current_win()
   local buf = vim.api.nvim_get_current_buf()
 
-  -- mark window as snoozed
-  state.snoozed_windows[win] = true
+  -- mark window as snoozed, remember the line at which hide was triggered (0-indexed)
+  local anchor_line_0 = vim.api.nvim_win_get_cursor(win)[1] - 1
+  state.snoozed_windows[win] = { anchor_line = anchor_line_0 }
 
   -- clear currently rendered images in this window
   local images = api.get_images({ window = win })
@@ -640,7 +641,13 @@ api.hide_until_cursor_on_image = function()
         return
       end
 
-      -- Unconditionally unsnooze on first cursor move in this window and restore all images
+      -- only unsnooze once cursor moved to a different line than the anchor line
+      local current_line_0 = vim.api.nvim_win_get_cursor(win)[1] - 1
+      local snooze = state.snoozed_windows[win]
+      if snooze and snooze.anchor_line ~= nil and current_line_0 == snooze.anchor_line then
+        return
+      end
+
       local win_images = api.get_images({ window = win, buffer = buf })
       state.snoozed_windows[win] = nil
       for _, to_render in ipairs(win_images) do
