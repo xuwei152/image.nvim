@@ -261,9 +261,6 @@ local from_file = function(path, options, state)
     end
   end
 
-  
-
-
   -- bail if not an image
   if not utils.magic.is_image(absolute_original_path) then
     log.info(("not an image: %s"):format(absolute_original_path))
