@@ -341,12 +341,12 @@ local from_file = function(path, options, state)
     -- case 3: non-png, not converted
     -- case 2: png
     if format ~= "png" and format ~= "jpg" and format ~= "jpeg" then
-      if format == "svg" then
-        if vim.fn.executable('cairosvg') == 1 then
-          os.execute('cairosvg ' .. absolute_original_path .. ' -o ' .. converted_path)
-          vim.notify('cairosvg: converted svg to png')
+      if format == "svg" or format == "xml" then -- the svg is also recognized as xml
+        if vim.fn.executable('inkscape') == 1 then
+          vim.notify('inkscape: converted svg to png')
+          os.execute('inkscape ' .. absolute_original_path .. ' --export-type="png"  --export-filename=' .. converted_path .. ' --export-dpi=300')
         else
-          vim.notify('cairosvg: not found, install cairosvg with "pip install cairosvg"')
+          vim.notify('inkscape: not found')
         end
       elseif format == "pdf" then
         if vim.fn.executable('qpdf') == 1 then
