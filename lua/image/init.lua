@@ -66,6 +66,8 @@ local state = {
   disable_decorator_handling = false,
   hijacked_win_buf_images = {},
   enabled = true,
+  --- windows where rendering is temporarily snoozed until cursor lands on an image line
+  snoozed_windows = {},
 }
 
 ---@type API
@@ -131,6 +133,9 @@ api.setup = function(options)
 
       -- bail if decorator handling is disabled
       if state.disable_decorator_handling then return false end
+
+      -- bail if window is snoozed (until cursor on image line)
+      if state.snoozed_windows[winid] then return false end
 
       -- bail if not in normal mode, there's a weird behavior where in visual mode this callback gets called CONTINUOUSLY
       if vim.api.nvim_get_mode().mode ~= "n" then return false end
@@ -284,13 +289,18 @@ api.setup = function(options)
       -- bail if not enabled
       if not state.enabled then return end
 
-      local images = api.get_images({ window = tonumber(au.file) })
+      local winid = tonumber(au.file)
+      if state.snoozed_windows[winid] then return end
+
+      local images = api.get_images({ window = winid })
 
       -- bail if there are no images
       if #images == 0 then return end
 
       for _, current_image in ipairs(images) do
-        current_image:render()
+        if not state.snoozed_windows[winid] then
+          current_image:render()
+        end
       end
     end,
   })
@@ -304,7 +314,7 @@ api.setup = function(options)
 
       local images = api.get_images()
       for _, current_image in ipairs(images) do
-        if current_image.window ~= nil then
+        if current_image.window ~= nil and not state.snoozed_windows[current_image.window] then
           current_image:clear()
           current_image:render()
         end
@@ -386,13 +396,17 @@ api.setup = function(options)
           for _, current_image in ipairs(images) do
             if current_image.is_rendered then
               current_image:clear()
-              current_image:render()
+              if not state.snoozed_windows[current_image.window] then
+                current_image:render()
+              end
             end
           end
 
           -- render images cleared on focus loss
           for _, current_image in ipairs(images_to_restore_on_focus) do
-            current_image:render()
+            if not state.snoozed_windows[current_image.window] then
+              current_image:render()
+            end
           end
           images_to_restore_on_focus = {}
         end)()
@@ -446,6 +460,11 @@ api.setup = function(options)
   -- add :ImageReport
   vim.api.nvim_create_user_command("ImageReport", function()
     api.create_report()
+  end, {})
+
+  -- command to snooze current window preview until cursor lands on an image line
+  vim.api.nvim_create_user_command("ImageHideUntilCursorOnImage", function()
+    api.hide_until_cursor_on_image()
   end, {})
 end
 
@@ -578,6 +597,59 @@ api.disable = function()
   for _, current_image in ipairs(images) do
     current_image:clear(true)
   end
+end
+
+--- Temporarily hide images in the current window and restore when cursor
+--- moves onto a line containing an image in that window.
+api.hide_until_cursor_on_image = function()
+  guard_setup()
+  local win = vim.api.nvim_get_current_win()
+  local buf = vim.api.nvim_get_current_buf()
+
+  -- mark window as snoozed
+  state.snoozed_windows[win] = true
+
+  -- clear currently rendered images in this window
+  local images = api.get_images({ window = win })
+  for _, current_image in ipairs(images) do
+    current_image:clear(true)
+  end
+
+  -- also close any popup image windows if present
+  for _, w in ipairs(vim.api.nvim_list_wins()) do
+    local ok = pcall(vim.api.nvim_win_get_buf, w)
+    if ok then
+      local b = vim.api.nvim_win_get_buf(w)
+      local ft = vim.bo[b].filetype
+      if ft == "image_nvim_popup" and vim.api.nvim_win_is_valid(w) then
+        pcall(vim.api.nvim_win_close, w, true)
+      end
+    end
+  end
+
+  -- set an autocmd to restore rendering when cursor lands on an image line
+  local augroup = vim.api.nvim_create_augroup("image.nvim.snooze." .. tostring(win), { clear = true })
+  vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
+    group = augroup,
+    buffer = buf,
+    callback = function()
+      -- if window is invalid, cleanup
+      if not vim.api.nvim_win_is_valid(win) then
+        pcall(vim.api.nvim_del_augroup_by_name, "image.nvim.snooze." .. tostring(win))
+        state.snoozed_windows[win] = nil
+        return
+      end
+
+      -- Unconditionally unsnooze on first cursor move in this window and restore all images
+      local win_images = api.get_images({ window = win, buffer = buf })
+      state.snoozed_windows[win] = nil
+      for _, to_render in ipairs(win_images) do
+        to_render:render()
+      end
+      pcall(vim.api.nvim_del_augroup_by_name, "image.nvim.snooze." .. tostring(win))
+      return
+    end,
+  })
 end
 
 return api

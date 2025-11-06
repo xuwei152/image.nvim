@@ -59,6 +59,14 @@ local create_document_integration = function(config)
       for _, window in ipairs(windows) do
         if has_valid_filetype(ctx, window.buffer_filetype) then
           log.debug("Querying buffer images for window", { window_id = window.id, buffer = window.buffer })
+          -- if this window is snoozed, clear existing images and skip rendering new ones
+          if ctx.state.snoozed_windows and ctx.state.snoozed_windows[window.id] then
+            local prev = ctx.api.get_images({ window = window.id, buffer = window.buffer, namespace = config.name })
+            for _, image in ipairs(prev) do
+              image:clear(true)
+            end
+            goto continue_window
+          end
           local matches = config.query_buffer_images(window.buffer)
           log.debug("Found matches", { count = #matches })
           local previous_images = ctx.api.get_images({
@@ -102,6 +110,7 @@ local create_document_integration = function(config)
             if not vim.tbl_contains(new_image_ids, image.id) then image:clear() end
           end
         end
+        ::continue_window::
       end
 
       -- render images from queue
