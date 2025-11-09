@@ -123,19 +123,21 @@ local create_document_integration = function(config)
 
             -- Create a floating window for the image
             local term_size = utils.term.get_size()
-            local width, height = utils.math.adjust_to_aspect_ratio(
+            local content_width, content_height = utils.math.adjust_to_aspect_ratio(
               term_size,
               image.image_width,
               image.image_height,
               math.floor(term_size.screen_cols / 2),
               0
             )
+            -- For border = "single", Neovim adds 2 columns (left+right) and 2 rows (top+bottom)
+            -- So we need to add border space to get the total window size
             local win_config = {
               relative = "cursor",
               row = 1,
               col = 0,
-              width = width,
-              height = height,
+              width = content_width + 2,  -- add border width
+              height = content_height + 2,  -- add border height
               style = "minimal",
               border = "single",
             }
@@ -149,6 +151,7 @@ local create_document_integration = function(config)
             image.buffer = buf
 
             -- render after window is open
+            -- Use content dimensions (window content area, excluding border)
             vim.defer_fn(function()
               if vim.api.nvim_win_is_valid(win) then
                 local win_info = vim.fn.getwininfo(win)[1]
@@ -156,8 +159,8 @@ local create_document_integration = function(config)
                   image:render({
                     x = 0,
                     y = 0,
-                    width = width,
-                    height = height,
+                    width = content_width,
+                    height = content_height,
                   })
                 end
               end
