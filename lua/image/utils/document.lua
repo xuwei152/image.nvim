@@ -31,6 +31,23 @@ local is_remote_url = function(url)
   return string.sub(url, 1, 7) == "http://" or string.sub(url, 1, 8) == "https://"
 end
 
+---@param range { start_row: integer, start_col: integer, end_row: integer, end_col: integer }
+---@param cursor_row integer
+---@param cursor_col integer
+---@return boolean
+local is_cursor_within_range = function(range, cursor_row, cursor_col)
+  if cursor_row < range.start_row or cursor_row > range.end_row then return false end
+
+  if range.start_row == range.end_row then
+    return cursor_col >= range.start_col and cursor_col < range.end_col
+  end
+
+  if cursor_row == range.start_row then return cursor_col >= range.start_col end
+  if cursor_row == range.end_row then return cursor_col < range.end_col end
+
+  return true
+end
+
 ---@param ctx IntegrationContext
 ---@param filetype string
 ---@return boolean
@@ -76,7 +93,25 @@ local create_document_integration = function(config)
           })
           local new_image_ids = {}
           local file_path = vim.api.nvim_buf_get_name(window.buffer)
-          local cursor_row = vim.api.nvim_win_get_cursor(window.id)[1] - 1 -- 0-indexed row
+          local cursor_row, cursor_col, multiple_matches_on_cursor_row
+
+          if ctx.options.only_render_image_at_cursor then
+            local cursor_position = vim.api.nvim_win_get_cursor(window.id)
+            cursor_row = cursor_position[1] - 1 -- 0-indexed row
+            cursor_col = cursor_position[2]
+            multiple_matches_on_cursor_row = false
+            local matches_on_row = 0
+            for _, match in ipairs(matches) do
+              local row_in_range = cursor_row >= match.range.start_row and cursor_row <= match.range.end_row
+              if row_in_range then
+                matches_on_row = matches_on_row + 1
+                if matches_on_row > 1 then
+                  multiple_matches_on_cursor_row = true
+                  break
+                end
+              end
+            end
+          end
 
           for _, match in ipairs(matches) do
             local id = string.format(
@@ -87,9 +122,17 @@ local create_document_integration = function(config)
               utils.hash.sha256(match.url)
             )
 
-            if ctx.options.only_render_image_at_cursor and match.range.start_row ~= cursor_row then
-              log.debug("Skipping image not at cursor", { id = id })
-              goto continue
+            if ctx.options.only_render_image_at_cursor then
+              local row_in_range = cursor_row >= match.range.start_row and cursor_row <= match.range.end_row
+              if not row_in_range then
+                log.debug("Skipping image not on cursor row", { id = id })
+                goto continue
+              end
+
+              if multiple_matches_on_cursor_row and not is_cursor_within_range(match.range, cursor_row, cursor_col) then
+                log.debug("Skipping image not under cursor", { id = id })
+                goto continue
+              end
             end
 
             local to_render = {
