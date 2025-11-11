@@ -173,16 +173,14 @@ local create_document_integration = function(config)
               math.floor(term_size.screen_cols / 2),
               0
             )
-            -- For border = "single", Neovim adds 2 columns (left+right) and 2 rows (top+bottom)
-            -- So we need to add border space to get the total window size
             local win_config = {
               relative = "cursor",
               row = 1,
               col = 0,
-              width = content_width + 2,  -- add border width
-              height = content_height + 2,  -- add border height
+              width = content_width,
+              height = content_height,
               style = "minimal",
-              border = "single",
+              border = "none",
             }
             local buf = vim.api.nvim_create_buf(false, true)
             vim.bo[buf].filetype = "image_nvim_popup"
