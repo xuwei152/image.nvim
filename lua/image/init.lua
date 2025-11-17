@@ -91,7 +91,7 @@ api.setup = function(options)
       if not magick.has_magick then
         vim.api.nvim_err_writeln(
           "image.nvim: magick rock not found, please install it and restart your editor. Error: "
-            .. vim.inspect(magick.magick)
+          .. vim.inspect(magick.magick)
         )
         return
       end
@@ -213,7 +213,7 @@ api.setup = function(options)
 
       -- store new state
       window_history[winid] =
-        { topline = topline, botline = botline, bufnr = bufnr, height = height, folded_lines = folded_lines }
+      { topline = topline, botline = botline, bufnr = bufnr, height = height, folded_lines = folded_lines }
 
       -- execute deferred clear / rerender
       log.debug("needs_clear", { needs_clear = needs_clear, needs_rerender = needs_rerender })
@@ -346,8 +346,8 @@ api.setup = function(options)
 
   -- auto-toggle on editor focus change
   if
-    state.options.editor_only_render_when_focused
-    or (state.options.tmux_show_only_in_active_window and utils.tmux.is_tmux)
+      state.options.editor_only_render_when_focused
+      or (state.options.tmux_show_only_in_active_window and utils.tmux.is_tmux)
   then
     local images_to_restore_on_focus = {}
     local initial_tmux_window_id = utils.tmux.get_window_id()
@@ -362,9 +362,9 @@ api.setup = function(options)
         vim.schedule(function()
           log.debug("FocusLost")
           if
-            state.options.editor_only_render_when_focused
-            or (utils.tmux.is_tmux and utils.tmux.get_window_id() ~= initial_tmux_window_id)
-            or (utils.tmux.is_tmux and utils.tmux.get_current_session() ~= initial_tmux_session)
+              state.options.editor_only_render_when_focused
+              or (utils.tmux.is_tmux and utils.tmux.get_window_id() ~= initial_tmux_window_id)
+              or (utils.tmux.is_tmux and utils.tmux.get_current_session() ~= initial_tmux_session)
           then
             state.disable_decorator_handling = true
 
@@ -472,6 +472,23 @@ local guard_setup = function()
   if not state.backend then utils.throw("image.nvim is not setup. Call setup() first.") end
 end
 
+local trigger_insert_leave_autocmds = function()
+  -- Simulate entering insert mode and coming back to normal mode to fire user autocmds
+  -- Reference: user-provided snippet that feeds `a` then `<Esc>` with a small delay
+  local current_mode = vim.api.nvim_get_mode().mode
+  if current_mode ~= "n" then return end
+
+  local esc_key = vim.api.nvim_replace_termcodes("<Esc>", true, false, true)
+
+  vim.defer_fn(function()
+    vim.api.nvim_feedkeys("a", "n", false)
+
+    vim.defer_fn(function()
+      vim.api.nvim_feedkeys(esc_key, "i", false)
+    end, 200)
+  end, 200)
+end
+
 ---@param path string
 ---@param win number? if nil or 0, uses current window
 ---@param buf number? if nil or 0, uses current buffer
@@ -561,10 +578,10 @@ api.get_images = function(opts)
   for _, current_image in pairs(state.images) do
     if (namespace and current_image.namespace == namespace) or not namespace then
       if
-        (opts and opts.window and opts.window == current_image.window and not opts.buffer)
-        or (opts and opts.buffer and opts.buffer == current_image.buffer and not opts.window)
-        or (opts and opts.window and opts.buffer and opts.window == current_image.window and opts.buffer == current_image.buffer)
-        or not opts
+          (opts and opts.window and opts.window == current_image.window and not opts.buffer)
+          or (opts and opts.buffer and opts.buffer == current_image.buffer and not opts.window)
+          or (opts and opts.window and opts.buffer and opts.window == current_image.window and opts.buffer == current_image.buffer)
+          or not opts
       then
         table.insert(images, current_image)
       end
@@ -597,6 +614,67 @@ api.disable = function()
   for _, current_image in ipairs(images) do
     current_image:clear(true)
   end
+end
+
+--- Manually restore inline previews that were cleared temporarily (e.g. snoozed windows).
+---@param opts? { window?: number, buffer?: number, namespace?: string }
+---@return integer restored total amount of images that were re-rendered
+api.restore_window_previews = function(opts)
+  guard_setup()
+
+  local restore_opts = opts and vim.deepcopy(opts) or {}
+  if restore_opts.window == 0 then restore_opts.window = vim.api.nvim_get_current_win() end
+  if restore_opts.buffer == 0 then restore_opts.buffer = vim.api.nvim_get_current_buf() end
+
+  local window_filter = restore_opts.window
+  for winid, _ in pairs(state.snoozed_windows) do
+    if window_filter == nil or winid == window_filter then
+      state.snoozed_windows[winid] = nil
+      pcall(vim.api.nvim_del_augroup_by_name, "image.nvim.snooze." .. tostring(winid))
+    end
+  end
+
+  local render_queue = {}
+  local image_query_opts = not vim.tbl_isempty(restore_opts) and restore_opts or nil
+  local images = api.get_images(image_query_opts)
+  for _, current_image in ipairs(images) do
+    local skip = false
+
+    if current_image.window then
+      local ok, is_valid = pcall(vim.api.nvim_win_is_valid, current_image.window)
+      if not ok or not is_valid then skip = true end
+    end
+
+    if not skip and current_image.buffer then
+      local ok, is_valid = pcall(vim.api.nvim_buf_is_valid, current_image.buffer)
+      if not ok or not is_valid then skip = true end
+    end
+
+    if not skip then table.insert(render_queue, current_image) end
+  end
+
+  local restored = #render_queue
+  if restored == 0 then return 0 end
+
+  local render_images = function()
+    for _, image in ipairs(render_queue) do
+      local ok, err = pcall(function() image:render() end)
+      if not ok then log.warn("Failed to re-render image", { id = image.id, err = err }) end
+    end
+  end
+
+  local finalize_restore = function()
+    render_images()
+    trigger_insert_leave_autocmds()
+  end
+
+  if vim.fn.getcmdwintype() ~= "" then
+    vim.schedule(finalize_restore)
+  else
+    finalize_restore()
+  end
+
+  return restored
 end
 
 --- Temporarily hide images in the current window and restore when cursor

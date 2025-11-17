@@ -10,6 +10,7 @@
 ---@field is_enabled fun(): boolean
 ---@field enable fun()
 ---@field disable fun()
+---@field restore_window_previews fun(opts?: { window?: number, buffer?: number, namespace?: string }): integer
 
 ---@class State
 ---@field enabled boolean
