@@ -343,9 +343,26 @@ local from_file = function(path, options, state)
     if format ~= "png" and format ~= "jpg" and format ~= "jpeg" then
       if format == "svg" or format == "xml" then -- the svg is also recognized as xml
         if vim.fn.executable('inkscape') == 1 then
-          vim.notify('inkscape: converted svg to png')
-          os.execute('inkscape ' ..
-            absolute_original_path .. ' --export-type="png"  --export-filename=' .. converted_path .. ' --export-dpi=300')
+          local args = {
+            'inkscape',
+            absolute_original_path,
+            '--export-type=png',
+            '--export-filename=' .. converted_path,
+            '--export-dpi=300',
+          }
+          vim.notify('inkscape: converting svg to png')
+          local job_id = vim.fn.jobstart(args)
+          if job_id <= 0 then
+            vim.notify('inkscape: failed to start conversion job', vim.log.levels.ERROR)
+          else
+            local result = vim.fn.jobwait({ job_id }, -1)
+            local exit_code = result and result[1] or -1
+            if exit_code == 0 then
+              vim.notify('inkscape: converted svg to png')
+            else
+              vim.notify('inkscape: failed to convert svg to png (exit code: ' .. tostring(exit_code) .. ')', vim.log.levels.ERROR)
+            end
+          end
         else
           vim.notify('inkscape: not found')
         end
