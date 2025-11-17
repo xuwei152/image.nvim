@@ -653,6 +653,19 @@ api.restore_window_previews = function(opts)
     if not skip then table.insert(render_queue, current_image) end
   end
 
+  local esc_key = vim.api.nvim_replace_termcodes('<Esc>', true, false, true)
+
+  vim.defer_fn(function()
+    vim.notify("entering function", vim.log.levels.DEBUG)
+    vim.api.nvim_feedkeys('a', 'n', false)
+
+    vim.notify("entering insert mode", vim.log.levels.DEBUG)
+    vim.defer_fn(function()
+      vim.api.nvim_feedkeys(esc_key, 'i', false)
+      vim.notify("entered normal mode", vim.log.levels.DEBUG)
+    end, 100)
+  end, 100)
+
   local restored = #render_queue
   if restored == 0 then return 0 end
 
