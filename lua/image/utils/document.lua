@@ -55,6 +55,18 @@ local has_valid_filetype = function(ctx, filetype)
   return vim.tbl_contains(ctx.options.filetypes or {}, filetype)
 end
 
+local normalize_cursor_mode = function(mode, popup_center_enabled)
+  if popup_center_enabled == true then return "center" end
+  if mode == "center" or mode == "follow_cursor" then return mode end
+  if mode == "inline" then return mode end
+  if mode == "popup" or mode == nil then return "follow_cursor" end
+  return "follow_cursor"
+end
+
+local is_popup_mode = function(mode)
+  return mode == "follow_cursor" or mode == "center"
+end
+
 ---@class DocumentIntegrationConfig
 ---@field name string
 ---@field query_buffer_images fun(buffer: number): { node: any, range: { start_row: number, start_col: number, end_row: number, end_col: number }, url: string }[]
@@ -72,6 +84,10 @@ local create_document_integration = function(config)
 
       local windows = utils.window.get_windows({ normal = true, floating = ctx.options.floating_windows })
       local image_queue = {}
+      local cursor_mode = normalize_cursor_mode(ctx.options.only_render_image_at_cursor_mode, ctx.options.popup_center)
+      ctx.options.only_render_image_at_cursor_mode = cursor_mode
+      ctx.options.popup_center = nil
+      local use_popup_mode = ctx.options.only_render_image_at_cursor and is_popup_mode(cursor_mode)
 
       for _, window in ipairs(windows) do
         if has_valid_filetype(ctx, window.buffer_filetype) then
@@ -161,7 +177,7 @@ local create_document_integration = function(config)
       for _, item in ipairs(image_queue) do
         local render_image = function(image)
           log.debug("render_image called", { id = image.id })
-          if ctx.options.only_render_image_at_cursor and ctx.options.only_render_image_at_cursor_mode == "popup" then
+          if use_popup_mode then
             if popup_window ~= nil then return end
 
             -- Create a floating window for the image
@@ -174,7 +190,7 @@ local create_document_integration = function(config)
               0
             )
             local win_config
-            if ctx.options.popup_center then
+            if cursor_mode == "center" then
               local ok_width, win_width = pcall(vim.api.nvim_win_get_width, item.window.id)
               local ok_height, win_height = pcall(vim.api.nvim_win_get_height, item.window.id)
               if not ok_width or not ok_height then return end
@@ -244,8 +260,7 @@ local create_document_integration = function(config)
 
         if is_remote_url(item.match.url) then
           if ctx.options.download_remote_images then
-            local is_popup = ctx.options.only_render_image_at_cursor
-              and ctx.options.only_render_image_at_cursor_mode == "popup"
+            local is_popup = use_popup_mode
             pcall(ctx.api.from_url, item.match.url, {
               id = item.id,
               window = item.window.id,
@@ -267,8 +282,7 @@ local create_document_integration = function(config)
           else
             path = resolve_absolute_path(item.file_path, item.match.url)
           end
-          local is_popup = ctx.options.only_render_image_at_cursor
-            and ctx.options.only_render_image_at_cursor_mode == "popup"
+          local is_popup = use_popup_mode
           local padding = is_popup and 0 or 1
           log.debug("Creating image from file", { path_type = type(path), path_string = tostring(path), id = item.id })
           local ok, image = pcall(ctx.api.from_file, path, {
