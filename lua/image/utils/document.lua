@@ -173,15 +173,34 @@ local create_document_integration = function(config)
               math.floor(term_size.screen_cols / 2),
               0
             )
-            local win_config = {
-              relative = "cursor",
-              row = 1,
-              col = 0,
-              width = content_width,
-              height = content_height,
-              style = "minimal",
-              border = "none",
-            }
+            local win_config
+            if ctx.options.popup_center then
+              local ok_width, win_width = pcall(vim.api.nvim_win_get_width, item.window.id)
+              local ok_height, win_height = pcall(vim.api.nvim_win_get_height, item.window.id)
+              if not ok_width or not ok_height then return end
+              local row = math.max(0, math.floor((win_height - content_height) / 2))
+              local col = math.max(0, math.floor((win_width - content_width) / 2))
+              win_config = {
+                relative = "win",
+                win = item.window.id,
+                row = row,
+                col = col,
+                width = content_width,
+                height = content_height,
+                style = "minimal",
+                border = "none",
+              }
+            else
+              win_config = {
+                relative = "cursor",
+                row = 1,
+                col = 0,
+                width = content_width,
+                height = content_height,
+                style = "minimal",
+                border = "none",
+              }
+            end
             local buf = vim.api.nvim_create_buf(false, true)
             vim.bo[buf].filetype = "image_nvim_popup"
             local win = vim.api.nvim_open_win(buf, false, win_config)

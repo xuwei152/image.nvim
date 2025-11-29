@@ -30,6 +30,7 @@
 ---@field clear_in_insert_mode? boolean
 ---@field only_render_image_at_cursor? boolean
 ---@field only_render_image_at_cursor_mode? "inline"|"popup"
+---@field popup_center? boolean
 ---@field filetypes? string[]
 ---@field resolve_image_path? function
 ---@field floating_windows? boolean
