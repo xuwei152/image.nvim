@@ -357,7 +357,7 @@ local from_file = function(path, options, state)
           else
             local result = vim.fn.jobwait({ job_id }, -1)
             local exit_code = result and result[1] or -1
-            if exit_code ~= 0 then
+            if exit_code ~= 0 or vim.uv.fs_stat(converted_path) then
               vim.notify('inkscape: failed to convert svg to png (exit code: ' .. tostring(exit_code) .. ')', vim.log.levels.ERROR)
             end
           end
